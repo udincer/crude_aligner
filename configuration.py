@@ -1,0 +1,22 @@
+import yaml
+
+def load_configuration(config_fn):
+    with open(config_fn, 'r') as f:
+        return yaml.load(f)
+
+c = load_configuration('config.yaml')
+
+NUM_CORES = c['NUM_CORES']
+DATASET = c['DATASET']
+OUTPUT_SIZE = c['OUTPUT_SIZE']
+KEY_SIZE = c['KEY_SIZE']
+DATA_PATH = c['DATA_PATH']
+MAXIMUM_MISMATCH_COUNT = c['MAXIMUM_MISMATCH_COUNT']
+MINIMUM_NUMBER_OF_PIECES_TO_MATCH = c['MINIMUM_NUMBER_OF_PIECES_TO_MATCH']
+PAIRED_GAP_ESTIMATE_INTERVAL = c['PAIRED_GAP_ESTIMATE_INTERVAL']
+MAX_PAIRED_MISMATCH_COUNT = c['MAX_PAIRED_MISMATCH_COUNT']
+MIN_COVERAGE_FOR_INCLUSION = c['MIN_COVERAGE_FOR_INCLUSION']
+READ_SIZE = c['READ_SIZE']
+
+READS_FILE = 'reads_{}_chr_1.txt'.format(DATASET)
+REF_FILE = 'ref_{}_chr_1.txt'.format(DATASET)
