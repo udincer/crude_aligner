@@ -5,6 +5,8 @@ from collections import Counter
 import numpy as np
 from distance import hamming, levenshtein
 import time
+import sys
+import os
 
 CALL_LOOKUP = {0: 'A', 1: 'C', 2: 'G', 3: 'T'}
 INV_LOOKUP  = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
@@ -110,11 +112,12 @@ def get_nonperfect_stretches(pos_read_tuples, ref):
 
 
 def generate_donor_pieces(stretches, ref, pos_to_read):
-    STRETCH_LIMIT = 200
-    MARGIN = 8 + c.READ_SIZE/2
+    STRETCH_LIMIT = 120
+    MARGIN = 2 + c.READ_SIZE/4
     count = 0.0
     the_donors = []
-    for stretch in stretches:
+    donor_indexes = []
+    for stretch in stretches[0:100]:
         stretch_length = stretch[1]-stretch[0]
         if stretch_length > STRETCH_LIMIT:
             print '{} is over stretch limit, skipping.'.format(stretch)
@@ -133,10 +136,10 @@ def generate_donor_pieces(stretches, ref, pos_to_read):
                 pass
         # print 'reads: {}'.format(read_tuples)
         distances = []
-        for read_tuple in read_tuples:
-            ref_piece = ref[read_tuple[0]-MARGIN:read_tuple[0]+c.READ_SIZE+MARGIN]
+        #for read_tuple in read_tuples:
+            #ref_piece = ref[read_tuple[0]-MARGIN:read_tuple[0]+c.READ_SIZE+MARGIN]
             # read_str = utils.integer_to_key(read[1], c.READ_SIZE)
-            read_str = read_tuple
+            #read_str = read_tuple
             #distances.append(utils.sliding_window(read_str, ref_piece))
             # print 'ref: {}\nrea: {}'.format(ref_piece, read_str)
             # print 'distances {}'.format(distances)
@@ -145,17 +148,21 @@ def generate_donor_pieces(stretches, ref, pos_to_read):
         #argmin = distances.index(min(distances))
 
         argmin = 0 # first one always behaves well!
-        pos = read_tuples[argmin][0]
+        #pos = read_tuples[argmin][0]
         str = read_tuples[argmin][1]
         donor[argmin:argmin+c.READ_SIZE] = list(str)
 
-        iteration_count = xrange(10)
+        iteration_count = xrange(5)
         to_be_removed = []
         threshold = -40
         for _ in iteration_count:
             threshold += 2
             for item in to_be_removed:
-                read_tuples.remove(item)
+                try:
+                    read_tuples.remove(item)
+                except ValueError:
+                    print 'Value not in list problem.'
+                    break
             to_be_removed = []
 
             chosen_ones = []
@@ -179,9 +186,11 @@ def generate_donor_pieces(stretches, ref, pos_to_read):
             donor = piece_of_donor # new seed!
             #print donor
         the_donors.append(donor)
+        donor_indexes.append(start)
         count += 1
-        print 'Generating donors: {}% complete'.format(count/len(stretches))
-    return the_donors
+        print 'Generating donors: {:.2f}% complete'.format(count/len(stretches)*100)
+        print '{}\n{}'.format(ref[start-20:start+100], '                    ' + donor)
+    return (the_donors, donor_indexes)
 
 
 
@@ -223,7 +232,47 @@ def hamming_ignore_dots(s1,s2):
     return sum([0 if (s1[i] == '.' or s2[i] == '.') else -1 if s1[i] == s2[i] else 1 for i in xrange(len(s1))])
 
 
+### MIKE ###
+
+def edit_distance_matrix(ref, donor):
+    """
+    Computes the edit distance matrix between the donor and reference
+    This algorithm makes substitutions, insertions, and deletions all equal.
+    Does that strike you as making biological sense? You might try changing the cost of
+    deletions and insertions vs snps.
+    :param ref: reference genome (as an ACTG string)
+    :param donor: donor genome guess (as an ACTG string)
+    :return: complete (len(ref) + 1) x (len(donor) + 1) matrix computing all changes
+    """
+
+    output_matrix = np.zeros((len(ref), len(donor)))
+    # print len(ref), len(donor)
+    # print output_matrix
+    # This is a very fast and memory-efficient way to allocate a matrix
+    for i in range(len(ref)):
+        output_matrix[i, 0] = i
+    for j in range(len(donor)):
+        output_matrix[0, j] = j
+    for j in range(1, len(donor)):
+        for i in range(1, len(ref)):  # Big opportunities for improvement right here.
+            deletion = output_matrix[i - 1, j] + 1
+            insertion = output_matrix[i, j - 1] + 1
+            identity = output_matrix[i - 1, j - 1] if ref[i] == donor[j] else np.inf
+            substitution = output_matrix[i - 1, j - 1] + 1 if ref[i] != donor[j] else np.inf
+            output_matrix[i, j] = min(insertion, deletion, identity, substitution)
+    return output_matrix
+
+
 if __name__ == '__main__':
+    args = sys.argv[1:]
+    if len(args) == 2:
+        FILE_INDEX_BEGIN = int(args[0])
+        FILE_INDEX_END = int(args[1])
+    else:
+        FILE_INDEX_BEGIN = 0
+        FILE_INDEX_END = len(os.listdir('data/{}/reads_split/'.format(c.DATASET)))
+    print 'Processing files {} through {}'.format(FILE_INDEX_BEGIN, FILE_INDEX_END)
+
     print 'start pileup'
 
     ref = utils.read_reference('data/{}/{}'.format(c.DATASET, c.REF_FILE))
@@ -246,7 +295,38 @@ if __name__ == '__main__':
 
     # for key in pos_to_read:
     #     print 'key: {}\tvalue: {}'.format(key, pos_to_read[key])
-    generate_donor_pieces(bad_stretches, ref, pos_to_read)
+    (the_donors, donor_indexes) = generate_donor_pieces(bad_stretches, ref, pos_to_read)
+    snp_list = []
+    ins_list = []
+    del_list = []
+    for i in xrange(len(donor_indexes)):
+        stretch = bad_stretches[i]
+        (start, end) = (donor_indexes[i], donor_indexes[i] + 180)
+        local_ref = ref[start:end]
+        if the_donors[i] == None:
+            continue
+        donor = the_donors[i].strip('.')
+        changes = identify_changes(local_ref,donor,0)
+        for change in changes:
+            if change[0] == 'SNP':
+                f = change[1]
+                t = change[2]
+                loc = change[3] + donor_indexes[i]
+                snp_list.append((f,t,loc))
+            elif change[0] == 'INS':
+                ins = change[1]
+                loc = change[2] + donor_indexes[i]
+                ins_list.append((ins,loc))
+            if change[0] == 'DEL':
+                d = change[1]
+                loc = change[2] + donor_indexes[i]
+                del_list.append((d,loc))
+
+    print snp_list
+    print del_list
+    print ins_list
+
+
     print 'done?'
     # print 'piling up...'
     # donor = pileup2(alignment_flat)
