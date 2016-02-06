@@ -74,3 +74,11 @@ def sliding_window(s1, s2):
     min_distance = min(corr)
     min_index = corr.index(min_distance)
     return (min_index, min_distance)
+
+
+
+   # return sum([0 if s1[i]==s2[i] or (s1[i] == '.' or s2[i] == '.') else 1 for i in xrange(len(s1))])
+
+if __name__ == '__main__':
+
+    print hamming_ignore_dots('......AAABBAAAAAA...','...AAAAAAAAA.....A..')

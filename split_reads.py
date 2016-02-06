@@ -2,11 +2,11 @@ import os
 import utils
 import configuration as c
 
-MAX_NUM_LINES = 10000000
+NUM_LINES_SPLIT = c.NUM_LINES_SPLIT
 
 
 def split_reads(read_fn):
-    max_num_lines = MAX_NUM_LINES
+    max_num_lines = NUM_LINES_SPLIT
     file_count = 0
     with open(read_fn, 'r') as f:
         write_buffer = ''

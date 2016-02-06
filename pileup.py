@@ -7,6 +7,7 @@ from distance import hamming, levenshtein
 import time
 
 CALL_LOOKUP = {0: 'A', 1: 'C', 2: 'G', 3: 'T'}
+INV_LOOKUP  = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
 
 
 def consensus(res):
@@ -109,28 +110,150 @@ def get_nonperfect_stretches(pos_read_tuples, ref):
 
 
 def generate_donor_pieces(stretches, ref, pos_to_read):
+    STRETCH_LIMIT = 200
+    MARGIN = 8 + c.READ_SIZE/2
+    count = 0.0
+    the_donors = []
     for stretch in stretches:
-        (start, end) = (stretches[0], stretches[1])
-        reads = pos_to_read[start:end]
+        stretch_length = stretch[1]-stretch[0]
+        if stretch_length > STRETCH_LIMIT:
+            print '{} is over stretch limit, skipping.'.format(stretch)
+            the_donors.append(None)
+            continue
+        donor = ['.']*(c.READ_SIZE + 2*MARGIN + stretch_length)
+        read_tuples = []
+        (start, end) = (stretch[0]-c.READ_SIZE, stretch[1]+c.READ_SIZE)
+        if start < 0 or end > len(ref):
+            continue
+
+        for i in xrange(start,end):
+            try:
+                read_tuples.append((i,utils.integer_to_key(pos_to_read[i],c.READ_SIZE)))
+            except KeyError:
+                pass
+        # print 'reads: {}'.format(read_tuples)
+        distances = []
+        for read_tuple in read_tuples:
+            ref_piece = ref[read_tuple[0]-MARGIN:read_tuple[0]+c.READ_SIZE+MARGIN]
+            # read_str = utils.integer_to_key(read[1], c.READ_SIZE)
+            read_str = read_tuple
+            #distances.append(utils.sliding_window(read_str, ref_piece))
+            # print 'ref: {}\nrea: {}'.format(ref_piece, read_str)
+            # print 'distances {}'.format(distances)
+
+        # seed generation!
+        #argmin = distances.index(min(distances))
+
+        argmin = 0 # first one always behaves well!
+        pos = read_tuples[argmin][0]
+        str = read_tuples[argmin][1]
+        donor[argmin:argmin+c.READ_SIZE] = list(str)
+
+        iteration_count = xrange(10)
+        to_be_removed = []
+        threshold = -40
+        for _ in iteration_count:
+            threshold += 2
+            for item in to_be_removed:
+                read_tuples.remove(item)
+            to_be_removed = []
+
+            chosen_ones = []
+
+            #print '\n{} -> {}'.format(''.join(donor), stretch)
+            for read_tuple in read_tuples:
+                read = read_tuple[1]
+
+                for offset in xrange(len(donor) - len(read) + 1):
+                    j = len(donor) - len(read) - offset
+                    pre =  '.'*offset
+                    post = '.'*j
+                    padded = pre + read + post
+                    ham = hamming_ignore_dots(donor, padded)
+                    if ham < threshold:
+                        #print '{} -> {}'.format(padded, ham)
+                        chosen_ones.append(padded)
+                        to_be_removed.append(read_tuple)
+
+            piece_of_donor = pileup_ignore_dots(chosen_ones, donor)
+            donor = piece_of_donor # new seed!
+            #print donor
+        the_donors.append(donor)
+        count += 1
+        print 'Generating donors: {}% complete'.format(count/len(stretches))
+    return the_donors
+
+
+
+        # TODO
+
+def pileup_ignore_dots(list_good_reads, seed):
+    SEED_ADVANTAGE = 4
+    donor = seed
+    result = np.zeros((len(seed), 4))
+    for k in xrange(len(seed)):
+        if seed[k] == '.':
+            continue
+        result[k][INV_LOOKUP[seed[k]]] += SEED_ADVANTAGE
+
+    for good_read in list_good_reads:
+        for i in xrange(len(donor)):
+            if good_read[i] == '.':
+                continue
+            result[i][INV_LOOKUP[good_read[i]]] += 1
+    donor = consensus_for_donor(result)
+    return ''.join(donor)
+
+
+def consensus_for_donor(result):
+    INCLUSION_THRESH = 2
+
+    donor = ['.'] * len(result)
+    for i in xrange(len(result)):
+        if max(result[i]) < INCLUSION_THRESH:
+            donor[i] = '.'
+            continue
+        call_index = result[i].argmax()
+        donor[i] = CALL_LOOKUP[call_index]
+    return donor
+
+
+def hamming_ignore_dots(s1,s2):
+    assert len(s1)==len(s2)
+    return sum([0 if (s1[i] == '.' or s2[i] == '.') else -1 if s1[i] == s2[i] else 1 for i in xrange(len(s1))])
 
 
 if __name__ == '__main__':
     print 'start pileup'
 
-    ref = utils.read_reference('data/{}/{}'.format(c.DATASET,c.REF_FILE))
+    ref = utils.read_reference('data/{}/{}'.format(c.DATASET, c.REF_FILE))
     #mapping_pickles_folder = 'data/{}/pickled_mappings'.format(c.DATASET)
     #pickle_files = ['{}/mappings_part_{}.txt.pkl'.format(mapping_pickles_folder, i) for i in xrange(FILE_INDEX_BEGIN, FILE_INDEX_END)]
 
-    alignment = get_alignment_from_pickle('alignments_{}_{}.pkl'.format(c.DATASET, c.KEY_SIZE))
-    alignment_flat = [item for sublist in alignment for item in sublist]
+    alignment = get_alignment_from_pickle('compiled_list_{}.pkl'.format(c.DATASET))
+    # alignment_flat = [item for sublist in alignment for item in sublist]
+    #
+    # bad_stretches = get_nonperfect_stretches(alignment, ref)
+    # pos_to_read = pickle.load(file('compiled_{}.pkl'.format(c.DATASET)))
+    #
+    # pickle.dump(bad_stretches, file('bad_stretches.pkl','wb'))
+    # pickle.dump(pos_to_read, file('pos_to_read.pkl','wb'))
+    #
+    # print 'pickled!'
 
-    bad_stretches = get_nonperfect_stretches(alignment_flat, ref)
-    print 'piling up...'
-    donor = pileup2(alignment_flat)
+    bad_stretches = pickle.load(file('bad_stretches.pkl','rb'))
+    pos_to_read = pickle.load(file('pos_to_read.pkl','rb'))
 
-    co = Counter()
-    [co.update(d) for d in donor]
-    print co
-
-    snps = all_snp(donor, ref)
-    print 'done'
+    # for key in pos_to_read:
+    #     print 'key: {}\tvalue: {}'.format(key, pos_to_read[key])
+    generate_donor_pieces(bad_stretches, ref, pos_to_read)
+    print 'done?'
+    # print 'piling up...'
+    # donor = pileup2(alignment_flat)
+    #
+    # co = Counter()
+    # [co.update(d) for d in donor]
+    # print co
+    #
+    # snps = all_snp(donor, ref)
+    # print 'done'
