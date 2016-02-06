@@ -2,7 +2,7 @@ import os
 import utils
 import configuration as c
 
-MAX_NUM_LINES = 1000000
+MAX_NUM_LINES = 10000000
 
 
 def split_reads(read_fn):

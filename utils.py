@@ -46,6 +46,8 @@ def key_to_integer(key):
 def integer_to_key(integer, key_size):
     key = ''
     str = format(integer,'b')
+    if len(str)%2 == 1:
+        str = '0' + str
     kk = [str[i:i+2] for i in xrange(0, len(str), 2)]
     for k in kk:
         key += binary_to_nucleotide[k]
