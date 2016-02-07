@@ -74,58 +74,106 @@ def all_snp(donor, ref):
 
     return snp_list_filtered
 
-
-def get_nonperfect_stretches(pos_read_tuples, ref):
-    # identify bad regions
-
-    good_areas = [False] * len(ref)
-    start = time.time()
-    count = 0.0
-    for t in pos_read_tuples:
-        read = utils.integer_to_key(t[1], c.READ_SIZE)
-        pos = t[0]
-        ref_piece = ref[pos:pos+c.READ_SIZE]
-        if hamming(read, ref_piece) == 0:
-            good_areas[pos:pos+c.READ_SIZE] = [True] * c.READ_SIZE
-        count += 1
-        if count % 10000 == 0:
-            print '{}'.format(count/len(pos_read_tuples))
-            print '{}'.format(time.time() - start)
-
-        #print 'read: {}\nreff: {}\ndist:{}'.format(read, ref_piece, dist)
-    print 'done in {}'.format((time.time() - start))
-
-    # str = ''.join(['O' if good_areas[i] else 'X' for i in xrange(len(good_areas))])
-    # for i in xrange(0,12000,120):
-    #     print str[i:i+120]
-
-    stretches = []
-    start = 0
-    for i in xrange(1,len(good_areas)):
-        if good_areas[i-1] and not good_areas[i]:
-            start = i
-        elif not good_areas[i-1] and good_areas[i]:
-            end = i
-            stretches.append((start, end))
-
-    return stretches
-
+#
+# def generate_donor_pieces_with_sorted_list(stretches, ref, sorted_nprt):
+#     STRETCH_LIMIT = 120
+#     MARGIN = 2 + c.READ_SIZE/4
+#     count = 0.0
+#     the_donors = []
+#     donor_indexes = []
+#     for stretch in stretches[0:100]:
+#         stretch_length = stretch[1]-stretch[0]
+#         if stretch_length > STRETCH_LIMIT:
+#             print '{} is over stretch limit, skipping.'.format(stretch)
+#             the_donors.append(None)
+#             continue
+#         donor = ['.']*(c.READ_SIZE + 2*MARGIN + stretch_length)
+#         read_tuples = []
+#         (start, end) = (stretch[0]-c.READ_SIZE, stretch[1]+c.READ_SIZE)
+#         if start < 0 or end > len(ref):
+#             continue
+#
+#         for i in xrange(start,end):
+#             try:
+#                 read_tuples.append((i,utils.sorted_get_index(sorted_nprt,i)))
+#             except ValueError:
+#                 pass
+#         # print 'reads: {}'.format(read_tuples)
+#         distances = []
+#         #for read_tuple in read_tuples:
+#             #ref_piece = ref[read_tuple[0]-MARGIN:read_tuple[0]+c.READ_SIZE+MARGIN]
+#             # read_str = utils.integer_to_key(read[1], c.READ_SIZE)
+#             #read_str = read_tuple
+#             #distances.append(utils.sliding_window(read_str, ref_piece))
+#             # print 'ref: {}\nrea: {}'.format(ref_piece, read_str)
+#             # print 'distances {}'.format(distances)
+#
+#         # seed generation!
+#         #argmin = distances.index(min(distances))
+#
+#         argmin = 0 # first one always behaves well!
+#         #pos = read_tuples[argmin][0]
+#         str = read_tuples[argmin][1]
+#         donor[argmin:argmin+c.READ_SIZE] = list(utils.integer_to_key(str,c.READ_SIZE))
+#
+#         iteration_count = xrange(5)
+#         to_be_removed = []
+#         threshold = -40
+#         for _ in iteration_count:
+#             threshold += 2
+#             for item in to_be_removed:
+#                 try:
+#                     read_tuples.remove(item)
+#                 except ValueError:
+#                     print 'Value not in list problem.'
+#                     break
+#             to_be_removed = []
+#
+#             chosen_ones = []
+#
+#             #print '\n{} -> {}'.format(''.join(donor), stretch)
+#             for read_tuple in read_tuples:
+#                 read_num = read_tuple[1]
+#                 read = utils.integer_to_key(read_num, c.READ_SIZE)
+#
+#                 for offset in xrange(len(donor) - len(read) + 1):
+#                     j = len(donor) - len(read) - offset
+#                     pre =  '.'*offset
+#                     post = '.'*j
+#                     padded = pre + read + post
+#                     ham = hamming_ignore_dots(donor, padded)
+#                     if ham < threshold:
+#                         #print '{} -> {}'.format(padded, ham)
+#                         chosen_ones.append(padded)
+#                         to_be_removed.append(read_tuple)
+#
+#             piece_of_donor = pileup_ignore_dots(chosen_ones, donor)
+#             donor = piece_of_donor # new seed!
+#             #print donor
+#         the_donors.append(donor)
+#         donor_indexes.append(start)
+#         count += 1
+#         print 'Generating donors: {:.2f}% complete'.format(count/len(stretches)*100)
+#         print '{}\n{}'.format(ref[start-20:start+100], '                    ' + donor)
+#     return (the_donors, donor_indexes)
+#
 
 def generate_donor_pieces(stretches, ref, pos_to_read):
-    STRETCH_LIMIT = 120
-    MARGIN = 2 + c.READ_SIZE/4
+    STRETCH_LIMIT = 200
+    MARGIN_LEFT = c.READ_SIZE + 1
+    MARGIN_RIGHT = 5
     count = 0.0
     the_donors = []
     donor_indexes = []
-    for stretch in stretches[0:100]:
+    for stretch in stretches:
         stretch_length = stretch[1]-stretch[0]
         if stretch_length > STRETCH_LIMIT:
             print '{} is over stretch limit, skipping.'.format(stretch)
             the_donors.append(None)
             continue
-        donor = ['.']*(c.READ_SIZE + 2*MARGIN + stretch_length)
+        donor = ['.']*(c.READ_SIZE + 1*MARGIN_LEFT + stretch_length)
         read_tuples = []
-        (start, end) = (stretch[0]-c.READ_SIZE, stretch[1]+c.READ_SIZE)
+        (start, end) = (stretch[0]-MARGIN_LEFT, stretch[1]+MARGIN_RIGHT)
         if start < 0 or end > len(ref):
             continue
 
@@ -148,13 +196,13 @@ def generate_donor_pieces(stretches, ref, pos_to_read):
         #argmin = distances.index(min(distances))
 
         argmin = 0 # first one always behaves well!
-        #pos = read_tuples[argmin][0]
+        pos = read_tuples[argmin][0]
         str = read_tuples[argmin][1]
         donor[argmin:argmin+c.READ_SIZE] = list(str)
 
-        iteration_count = xrange(5)
+        iteration_count = xrange(10)
         to_be_removed = []
-        threshold = -40
+        threshold = -30
         for _ in iteration_count:
             threshold += 2
             for item in to_be_removed:
@@ -185,11 +233,14 @@ def generate_donor_pieces(stretches, ref, pos_to_read):
             piece_of_donor = pileup_ignore_dots(chosen_ones, donor)
             donor = piece_of_donor # new seed!
             #print donor
-        the_donors.append(donor)
-        donor_indexes.append(start)
+        the_donors.append(donor.strip('.'))
+        donor_indexes.append(pos)
         count += 1
-        print 'Generating donors: {:.2f}% complete'.format(count/len(stretches)*100)
-        print '{}\n{}'.format(ref[start-20:start+100], '                    ' + donor)
+        #matching_positions = ['|' if ref[pos+i] == donor[i] else ' ' for i in xrange(len(donor))]
+        pipes = ''.join(['|' if ref[pos+i] == donor[i] else ' ' for i in xrange(len(donor))])
+        if pipes.count('|') < len(donor.strip('.')) - 5:
+            print 'Generating donors: {:.2f}% complete'.format(count/len(stretches)*100)
+            print '{}\n{}\n{}'.format(ref[pos:pos+len(donor)], pipes, donor)
     return (the_donors, donor_indexes)
 
 
@@ -280,9 +331,14 @@ if __name__ == '__main__':
     #pickle_files = ['{}/mappings_part_{}.txt.pkl'.format(mapping_pickles_folder, i) for i in xrange(FILE_INDEX_BEGIN, FILE_INDEX_END)]
 
     alignment = get_alignment_from_pickle('compiled_list_{}.pkl'.format(c.DATASET))
+    # alignment_sorted = sorted(alignment)
     # alignment_flat = [item for sublist in alignment for item in sublist]
     #
-    # bad_stretches = get_nonperfect_stretches(alignment, ref)
+    stretches = pickle.load(file('stretches_{}.pkl'.format(c.DATASET), 'rb'))
+    # nprt_sl = pickle.load(file('sorted_nprt_{}.pkl'.format(c.DATASET), 'rb'))
+    #
+    # print 'nonpeft len: {}'.format(len(nprt_sl))
+    # print 'align len:   {}'.format(len(alignment))
     # pos_to_read = pickle.load(file('compiled_{}.pkl'.format(c.DATASET)))
     #
     # pickle.dump(bad_stretches, file('bad_stretches.pkl','wb'))
@@ -290,41 +346,47 @@ if __name__ == '__main__':
     #
     # print 'pickled!'
 
-    bad_stretches = pickle.load(file('bad_stretches.pkl','rb'))
+    # bad_stretches = pickle.load(file('bad_stretches.pkl','rb'))
     pos_to_read = pickle.load(file('pos_to_read.pkl','rb'))
 
     # for key in pos_to_read:
     #     print 'key: {}\tvalue: {}'.format(key, pos_to_read[key])
-    (the_donors, donor_indexes) = generate_donor_pieces(bad_stretches, ref, pos_to_read)
-    snp_list = []
-    ins_list = []
-    del_list = []
-    for i in xrange(len(donor_indexes)):
-        stretch = bad_stretches[i]
-        (start, end) = (donor_indexes[i], donor_indexes[i] + 180)
-        local_ref = ref[start:end]
-        if the_donors[i] == None:
-            continue
-        donor = the_donors[i].strip('.')
-        changes = identify_changes(local_ref,donor,0)
-        for change in changes:
-            if change[0] == 'SNP':
-                f = change[1]
-                t = change[2]
-                loc = change[3] + donor_indexes[i]
-                snp_list.append((f,t,loc))
-            elif change[0] == 'INS':
-                ins = change[1]
-                loc = change[2] + donor_indexes[i]
-                ins_list.append((ins,loc))
-            if change[0] == 'DEL':
-                d = change[1]
-                loc = change[2] + donor_indexes[i]
-                del_list.append((d,loc))
 
-    print snp_list
-    print del_list
-    print ins_list
+    (the_donors, donor_indexes) = generate_donor_pieces(stretches, ref, pos_to_read)
+    #(the_donors, donor_indexes) = generate_donor_pieces_with_sorted_list(stretches, ref, alignment_sorted)
+
+    pickle.dump(the_donors, file('bad_stretches.pkl','wb'))
+    pickle.dump(donor_indexes, file('pos_to_read.pkl','wb'))
+
+    # snp_list = []
+    # ins_list = []
+    # del_list = []
+    # for i in xrange(len(donor_indexes)):
+    #     stretch = stretches[i]
+    #     (start, end) = (donor_indexes[i], donor_indexes[i] + 180)
+    #     local_ref = ref[start:end]
+    #     if the_donors[i] == None:
+    #         continue
+    #     donor = the_donors[i].strip('.')
+    #     changes = identify_changes(local_ref,donor,0)
+    #     for change in changes:
+    #         if change[0] == 'SNP':
+    #             f = change[1]
+    #             t = change[2]
+    #             loc = change[3] + donor_indexes[i]
+    #             snp_list.append((f,t,loc))
+    #         elif change[0] == 'INS':
+    #             ins = change[1]
+    #             loc = change[2] + donor_indexes[i]
+    #             ins_list.append((ins,loc))
+    #         if change[0] == 'DEL':
+    #             d = change[1]
+    #             loc = change[2] + donor_indexes[i]
+    #             del_list.append((d,loc))
+    #
+    # print snp_list
+    # print del_list
+    # print ins_list
 
 
     print 'done?'

@@ -1,9 +1,10 @@
 import configuration as c
+from bisect import bisect_left
 
 nucleotide_to_binary = {'A':'00', 'T':'01', 'C':'10', 'G':'11'}
 binary_to_nucleotide = {'00':'A', '01':'T', '10':'C', '11':'G'}
 
-def read_reference(ref_fn):
+def read_reference(ref_fn = '{}/{}/{}'.format(c.DATA_PATH,c.DATASET,c.REF_FILE)):
     print 'reading ref...'
     f = open(ref_fn, 'r')
     first_line = True
@@ -75,6 +76,13 @@ def sliding_window(s1, s2):
     min_index = corr.index(min_distance)
     return (min_index, min_distance)
 
+
+def sorted_get_index(list, x):
+    'Locate the leftmost value exactly equal to x'
+    i = bisect_left([l[0] for l in list], x)
+    if i != len(list) and list[i][0] == x:
+        return i
+    raise ValueError
 
 
    # return sum([0 if s1[i]==s2[i] or (s1[i] == '.' or s2[i] == '.') else 1 for i in xrange(len(s1))])
