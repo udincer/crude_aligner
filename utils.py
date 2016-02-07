@@ -116,8 +116,10 @@ def write_indels(good_changes, num):
             output_file.write('{},{}\n'.format(ddd[1],ddd[2]))
 
         output_file.write('>SNP\n')
-        for snp in snps:
-            output_file.write('{},{},{}\n'.format(snp[1],snp[2],snp[3]))
+        for i in xrange(len(snps)-1):
+            snp = snps[i]
+            if abs(snps[i][3] - snps[i+1][3]) > 4:
+                output_file.write('{},{},{}\n'.format(snp[1],snp[2],snp[3]))
 
 
 # return sum([0 if s1[i]==s2[i] or (s1[i] == '.' or s2[i] == '.') else 1 for i in xrange(len(s1))])

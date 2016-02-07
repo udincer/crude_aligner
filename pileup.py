@@ -186,13 +186,13 @@ def generate_donor_pieces(stretches, ref, pos_to_read):
     for stretch in stretches:
         the_donors.append(get_donor_for_stretch(stretch,ref ,pos_to_read))
         count += 1
-        if count % 1000 == 0:
+        if count % 100 == 0:
             print 'progress: {:.2f}'.format(count / len(stretches))
     return the_donors
 
 
 def get_donor_for_stretch(stretch, ref, pos_to_read):
-    STRETCH_LIMIT = 6
+    STRETCH_LIMIT = 20
     MARGIN_LEFT = c.READ_SIZE
     MARGIN_RIGHT = c.READ_SIZE
 
@@ -265,12 +265,12 @@ def get_donor_for_stretch(stretch, ref, pos_to_read):
     # except IndexError:
     #     return
 
-    print 'initial state of donor:\n{}'.format(''.join(donor))
+    #print 'initial state of donor:\n{}'.format(''.join(donor))
 
-    iteration_count = xrange(3)
+    iteration_count = xrange(6)
     to_be_removed = []
     still_unused = []
-    threshold = -30
+    threshold = -40
     for _ in iteration_count:
         threshold += 3
         for item in to_be_removed:
@@ -282,7 +282,6 @@ def get_donor_for_stretch(stretch, ref, pos_to_read):
         to_be_removed = []
 
         chosen_ones = []
-        print '\n{} -> {}'.format(''.join(donor), stretch)
         for read_tuple in read_tuples:
             if read_tuple == None:
                 continue
@@ -308,11 +307,13 @@ def get_donor_for_stretch(stretch, ref, pos_to_read):
                 padded = pre + list(read) + post
                 chosen_ones.append(padded)
                 to_be_removed.append(read_tuple)
-                print '{} -> {}'.format(''.join(padded), min(hams))
+                #print '{} -> {}'.format(''.join(padded), min(hams))
 
         piece_of_donor = pileup_ignore_dots(chosen_ones, donor)
         donor = piece_of_donor  # new seed!
 
+
+    print '\n{} -> {}'.format(''.join(donor), stretch)
     return (start, donor.strip('.'))
 
 
@@ -435,9 +436,9 @@ if __name__ == '__main__':
         all_snp(d, ref)
         exit()
 
-    #d = pileup2(alignment)
-    # msgpack.dump(d, file('pileup2.msg','wb'))
-    d = msgpack.load(file('pileup2.msg','rb'))
+    d = pileup2(alignment)
+    msgpack.dump(d, file('pileup2.msg','wb'))
+    #d = msgpack.load(file('pileup2.msg','rb'))
     print 'pileup complete'
     if DO_NUMBER == 0:
         print 'all snps'
@@ -449,7 +450,7 @@ if __name__ == '__main__':
     print 'called indel zones'
     iz = msgpack.load(file('stretches_{}.msg'.format(c.DATASET), 'rb'))
     print 'before length filtering: {}'.format(len(iz))
-    iz = [x for x in iz if x[1] - x[0] <= 5]
+    iz = [x for x in iz if x[1] - x[0] <= 8]
     print '{} spots will be checked for indels'.format(len(iz))
 
     pos_to_read = pickle.load(file('pos_to_read.pkl','rb'))
@@ -480,11 +481,13 @@ if __name__ == '__main__':
         ref_piece = ref[pos:pos+len(donor)]
         changes, score = dependencies.identify_changes(ref_piece,donor,0)
         if score < SCORE_THRESHOLD:
-            visualize_lines(donor,pos,ref, pos)
-            print 'C.\n{}'.format(changes)
-            #print visualize_lines(donor,pos,ref_piece)
+            #visualize_lines(donor,pos,ref, pos)
+            #print 'C.\n{}'.format(changes)
             for cc in changes:
                 try:
+                    if cc[2] == '.':
+                        changes.remove(cc)
+                        continue
                     cc[3] += pos
                 except:
                     cc[2] += pos
