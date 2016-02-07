@@ -1,11 +1,10 @@
 import os
 import configuration as c
 import cPickle as pickle
-from sortedcontainers import SortedListWithKey
 import time
 import utils
 from bitarray import bitarray
-from sortedcontainers import SortedList
+import msgpack
 
 def compile_alignments_into_dict():
     print 'compiling alignments into dict...'
@@ -48,10 +47,11 @@ def ident_bad_regions(some_pr_tuples, ref):
         read_num = t[1]
         pos = t[0]
         ref_piece_num = utils.key_to_integer(ref[pos:pos+c.READ_SIZE])
-        if read_num == ref_piece_num:
-            good_areas[pos:pos+c.READ_SIZE] = True
-        else:
-            nonperfect_pos_read_tuples.append(t)
+        #if read_num == ref_piece_num:
+        #    good_areas[pos:pos+c.READ_SIZE] = True
+        good_areas[pos:pos+c.READ_SIZE] = True
+        #else:
+        #    nonperfect_pos_read_tuples.append(t)
         count += 1
         if count % 10000 == 0:
             print '{}'.format(count/len(some_pr_tuples))
@@ -74,7 +74,7 @@ def get_nonperfect_stretches(ref):
 
     ga_overall = None
     first = True
-    nprt_list = []
+    #nprt_list = []
     for fn in fns:
         print 'getting stretches for: {}'.format(fn)
         alignments = pickle.load(open('{}{}'.format(directory,fn), 'rb'))
@@ -84,7 +84,7 @@ def get_nonperfect_stretches(ref):
             ga_overall = ga
         else:
             ga_overall = merge_bad_regions([ga_overall, ga])
-        nprt_list.extend(nprt)
+        #nprt_list.extend(nprt)
 
     stretches = []
     start = 0
@@ -95,7 +95,7 @@ def get_nonperfect_stretches(ref):
             end = i
             stretches.append((start, end))
 
-    return (stretches, nprt_list)
+    return stretches
 
 
 # def compile_alignments_into_sorted_list():
@@ -117,13 +117,15 @@ def get_nonperfect_stretches(ref):
 if __name__ == '__main__':
 
     ref = utils.read_reference()
-    (stretches, nprt_list) = get_nonperfect_stretches(ref)
+    stretches = get_nonperfect_stretches(ref)
 
     #print 'sorting...'
     #sl = sorted(nprt_list)
     #print 'sorted: {}'.format(sl)
 
-    pickle.dump(stretches, file('stretches_{}.pkl'.format(c.DATASET), 'wb'))
+    #pickle.dump(stretches, file('stretches_{}.pkl'.format(c.DATASET), 'wb'))
+    msgpack.dump(stretches, file('stretches_{}.msg'.format(c.DATASET), 'wb'))
+
     #pickle.dump(sl, file('sorted_nprt_{}.pkl'.format(c.DATASET), 'wb'))
 
     print 'DONE'

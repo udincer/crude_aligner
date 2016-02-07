@@ -1,8 +1,9 @@
 import configuration as c
 from bisect import bisect_left
+import array
 
 nucleotide_to_binary = {'A':'00', 'T':'01', 'C':'10', 'G':'11'}
-binary_to_nucleotide = {'00':'A', '01':'T', '10':'C', '11':'G'}
+binary_to_nucleotide = {0: 'A', 1: 'T', 2: 'C', 3: 'G'}
 
 def read_reference(ref_fn = '{}/{}/{}'.format(c.DATA_PATH,c.DATASET,c.REF_FILE)):
     print 'reading ref...'
@@ -45,16 +46,22 @@ def key_to_integer(key):
 
 
 def integer_to_key(integer, key_size):
-    key = ''
-    str = format(integer,'b')
-    if len(str)%2 == 1:
-        str = '0' + str
-    kk = [str[i:i+2] for i in xrange(0, len(str), 2)]
-    for k in kk:
-        key += binary_to_nucleotide[k]
-    if len(key)< key_size:
-        key = 'A'*(key_size-len(key))+key
-    return key
+    key = array.array('c')
+    i = 0
+    while integer > 0:
+        key.append(binary_to_nucleotide[integer % 4])
+        integer = integer >> 2
+    key_str = '{}{}'.format('A'*(key_size-len(key)),''.join(key[::-1]))
+    # key = 'A'*(key_size-len(key))+key
+    # the_string = bin(integer)
+    # if len(the_string)%2 == 1:
+    #     the_string = '0' + the_string
+    # kk = [the_string[i:i+2] for i in xrange(0, len(the_string), 2)]
+    # for k in kk:
+    #     key += binary_to_nucleotide[k]
+    # if len(key)< key_size:
+    #     key = 'A'*(key_size-len(key))+key
+    return key_str
 
 
 def count_mismatches(s1, s2):
@@ -85,7 +92,34 @@ def sorted_get_index(list, x):
     raise ValueError
 
 
-   # return sum([0 if s1[i]==s2[i] or (s1[i] == '.' or s2[i] == '.') else 1 for i in xrange(len(s1))])
+def write_indels(good_changes, num):
+    snps = []
+    inss = []
+    dels = []
+    with open("{}_indels_out_part_{}.txt".format(c.DATASET, num), "w") as output_file:
+        output_file.write('>{}_{}\n'.format(c.DATASET, 'chr_1'))
+        for change in good_changes:
+            if change[0] == 'SNP':
+                snps.append(change)
+            elif change[0] == 'INS':
+                inss.append(change)
+            elif change[0] == 'DEL':
+                dels.append(change)
+        print 'writing indels file'
+        output_file.write('>SNP\n')
+        for snp in snps:
+            output_file.write('{},{},{}\n'.format(snp[1],snp[2],snp[3]))
+
+        output_file.write('>INS\n')
+        for ins in inss:
+            output_file.write('{},{}\n'.format(ins[1],ins[2]))
+
+        output_file.write('>DEL\n')
+        for ddd in dels:
+            output_file.write('{},{}\n'.format(ddd[1],ddd[2]))
+
+
+# return sum([0 if s1[i]==s2[i] or (s1[i] == '.' or s2[i] == '.') else 1 for i in xrange(len(s1))])
 
 if __name__ == '__main__':
 

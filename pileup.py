@@ -3,13 +3,33 @@ import utils
 import cPickle as pickle
 from collections import Counter
 import numpy as np
-from distance import hamming, levenshtein
 import time
 import sys
 import os
+import msgpack
+import bisect
+#import cProfile
+import dependencies
 
 CALL_LOOKUP = {0: 'A', 1: 'C', 2: 'G', 3: 'T'}
 INV_LOOKUP  = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
+
+
+def call_indel_zones(donor, ref):
+    BIN_SIZE = 25
+    indel_zones = []
+    mismatches = [i for i in xrange(len(donor)) if donor[i] != ref[i]]
+    for s in xrange(0,len(donor),BIN_SIZE):
+        f = bisect.bisect_left(mismatches, s)
+        l = bisect.bisect_left(mismatches, s + BIN_SIZE)
+        num_mismatches_in_interval = l - f
+        if 2 < num_mismatches_in_interval < 8:
+            if l == len(mismatches):
+                continue
+            indel_zones.append((mismatches[f],mismatches[l]))
+    return indel_zones
+
+
 
 
 def consensus(res):
@@ -31,7 +51,7 @@ def pileup2(read_pos_tuple_list):
     #result = [[0,0,0,0] for x in xrange(c.OUTPUT_SIZE)]
     count = 0.0
     for read_pos_tuple in read_pos_tuple_list:
-        read = utils.integer_to_key(read_pos_tuple[1],c.KEY_SIZE)
+        read = utils.integer_to_key(read_pos_tuple[1],c.READ_SIZE)
         position = read_pos_tuple[0]
 
         for i in xrange(position,position+len(read)):
@@ -159,101 +179,125 @@ def all_snp(donor, ref):
 #
 
 def generate_donor_pieces(stretches, ref, pos_to_read):
-    STRETCH_LIMIT = 200
-    MARGIN_LEFT = c.READ_SIZE + 1
-    MARGIN_RIGHT = 5
     count = 0.0
     the_donors = []
-    donor_indexes = []
     for stretch in stretches:
-        stretch_length = stretch[1]-stretch[0]
-        if stretch_length > STRETCH_LIMIT:
-            print '{} is over stretch limit, skipping.'.format(stretch)
-            the_donors.append(None)
-            continue
-        donor = ['.']*(c.READ_SIZE + 1*MARGIN_LEFT + stretch_length)
-        read_tuples = []
-        (start, end) = (stretch[0]-MARGIN_LEFT, stretch[1]+MARGIN_RIGHT)
-        if start < 0 or end > len(ref):
-            continue
+        the_donors.append(get_donor_for_stretch(stretch,ref ,pos_to_read))
+        count += 1
+        print 'progress: {:.2f}'.format(count / len(stretches))
+    return the_donors
 
-        for i in xrange(start,end):
-            try:
-                read_tuples.append((i,utils.integer_to_key(pos_to_read[i],c.READ_SIZE)))
-            except KeyError:
-                pass
-        # print 'reads: {}'.format(read_tuples)
-        # distances = []
-        #for read_tuple in read_tuples:
-            #ref_piece = ref[read_tuple[0]-MARGIN:read_tuple[0]+c.READ_SIZE+MARGIN]
+
+def get_donor_for_stretch(stretch, ref, pos_to_read):
+    STRETCH_LIMIT = 5
+    MARGIN_LEFT = c.READ_SIZE + 2
+    MARGIN_RIGHT = 5
+
+    stretch_length = stretch[1] - stretch[0]
+    if stretch_length > STRETCH_LIMIT:
+        print '{} is over stretch limit, skipping.'.format(stretch)
+        return
+    donor = ['.'] * (MARGIN_RIGHT + MARGIN_LEFT + stretch_length)
+    read_tuples = []
+    (start, end) = (stretch[0] - MARGIN_LEFT, stretch[1] + MARGIN_RIGHT)
+    if start < 0 or end > len(ref):
+        return
+
+    for i in xrange(start, end):
+        try:
+            read_tuples.append((i, utils.integer_to_key(pos_to_read[i], c.READ_SIZE)))
+        except KeyError:
+            pass
+            # print 'reads: {}'.format(read_tuples)
+            # distances = []
+            # for read_tuple in read_tuples:
+            # ref_piece = ref[read_tuple[0]-MARGIN:read_tuple[0]+c.READ_SIZE+MARGIN]
             # read_str = utils.integer_to_key(read[1], c.READ_SIZE)
-            #read_str = read_tuple
-            #distances.append(utils.sliding_window(read_str, ref_piece))
+            # read_str = read_tuple
+            # distances.append(utils.sliding_window(read_str, ref_piece))
             # print 'ref: {}\nrea: {}'.format(ref_piece, read_str)
             # print 'distances {}'.format(distances)
 
-        # seed generation!
-        #argmin = distances.index(min(distances))
-        if len(read_tuples) < 5:
-            print 'skipping {} low read tuple count'.format(stretch)
-            continue
-        argmin = 0 # first one always behaves well!
-        try:
-            pos = read_tuples[argmin][0]
-            str = read_tuples[argmin][1]
-        except IndexError:
-            continue
-        donor[argmin:argmin+c.READ_SIZE] = list(str)
+    # seed generation!
+    # argmin = distances.index(min(distances))
+    if len(read_tuples) < 5:
+        print 'skipping {} low read tuple count'.format(stretch)
+        return
+    elif len(read_tuples) > 250:
+        print 'skipping {} HIGH read tuple count'.format(stretch)
+        return
+    argmin = 0  # first one always behaves well!
+    try:
+        pos = read_tuples[argmin][0]
+        str = read_tuples[argmin][1]
+        if hamming_ignore_dots_list_of_char(ref[pos:pos + c.READ_SIZE], str) > -1 * c.READ_SIZE + 1:
+            print 'skipping due to bad initial read'
+            print pos
+            return
+    except IndexError:
+        return
+    donor[argmin:argmin + c.READ_SIZE] = list(str)
 
-        iteration_count = xrange(10)
+    iteration_count = xrange(7)
+    to_be_removed = []
+    still_unused = []
+    threshold = -40
+    for _ in iteration_count:
+        threshold += 3
+        for item in to_be_removed:
+            try:
+                read_tuples.remove(item)
+            except ValueError:
+                print 'Value not in list problem. repetitive region'
+                return
         to_be_removed = []
-        threshold = -30
-        for _ in iteration_count:
-            threshold += 2
-            for item in to_be_removed:
-                try:
-                    read_tuples.remove(item)
-                except ValueError:
-                    print 'Value not in list problem.'
-                    break
-            to_be_removed = []
 
-            chosen_ones = []
+        chosen_ones = []
+        # print '\n{} -> {}'.format(''.join(donor), stretch)
+        for read_tuple in read_tuples:
+            if read_tuple == None:
+                continue
+            read = read_tuple[1]
+            hams = []
+            for offset in xrange(0, len(donor) - len(read)):
+                j = len(donor) - offset - len(read)
+                pre = ['.'] * offset
+                post = ['.'] * j
+                padded = pre + list(read) + post
+                ham = hamming_ignore_dots_list_of_char(donor, padded)
+                # if ham < -49:
+                #     print 'repetitive region! skipping...'
+                #     to_be_removed.extend(read_tuples)
+                #     break
 
-            #print '\n{} -> {}'.format(''.join(donor), stretch)
-            for read_tuple in read_tuples:
-                read = read_tuple[1]
+                hams.append(ham)
+            if min(hams) < threshold:
+                offset = hams.index(min(hams))
+                j = len(donor) - offset - len(read)
+                pre = ['.'] * offset
+                post = ['.'] * j
+                padded = pre + list(read) + post
+                chosen_ones.append(padded)
+                to_be_removed.append(read_tuple)
+                #print '{} -> {}'.format(''.join(padded), min(hams))
+            #else:
+                #still_unused.append(read_tuple)
 
-                for offset in xrange(len(donor) - len(read) + 1):
-                    j = len(donor) - len(read) - offset
-                    pre =  '.'*offset
-                    post = '.'*j
-                    padded = pre + read + post
-                    ham = hamming_ignore_dots(donor, padded)
-                    if ham < threshold:
-                        #print '{} -> {}'.format(padded, ham)
-                        chosen_ones.append(padded)
-                        to_be_removed.append(read_tuple)
+        piece_of_donor = pileup_ignore_dots(chosen_ones, donor)
+        donor = piece_of_donor  # new seed!
 
-            piece_of_donor = pileup_ignore_dots(chosen_ones, donor)
-            donor = piece_of_donor # new seed!
-            #print donor
-        the_donors.append(donor.strip('.'))
-        donor_indexes.append(pos)
-        count += 1
-        #matching_positions = ['|' if ref[pos+i] == donor[i] else ' ' for i in xrange(len(donor))]
-        pipes = ''.join(['|' if ref[pos+i] == donor[i] else ' ' for i in xrange(len(donor))])
-        if pipes.count('|') < len(donor.strip('.')) - 5:
-            print 'Generating donors: {:.2f}% complete'.format(count/len(stretches)*100)
-            print '{}\n{}\n{}'.format(ref[pos:pos+len(donor)], pipes, donor)
-    return (the_donors, donor_indexes)
+    return (pos, donor.strip('.'))
 
 
-
-        # TODO
+def visualize_lines(donor, pos, ref):
+    try:
+        pipes = ''.join(['|' if ref[i] == donor[i] else ' ' for i in xrange(len(donor))])
+        print '{}\n{}\n{}'.format(ref[0:0+len(donor)], pipes, donor)
+    except TypeError:
+        pass
 
 def pileup_ignore_dots(list_good_reads, seed):
-    SEED_ADVANTAGE = 4
+    SEED_ADVANTAGE = 3
     donor = seed
     result = np.zeros((len(seed), 4))
     for k in xrange(len(seed)):
@@ -283,51 +327,41 @@ def consensus_for_donor(result):
     return donor
 
 
-def hamming_ignore_dots(s1,s2):
+def hamming_ignore_dots(s1,s2): # BUG
     assert len(s1)==len(s2)
-    return sum([0 if (s1[i] == '.' or s2[i] == '.') else -1 if s1[i] == s2[i] else 1 for i in xrange(len(s1))])
+    r1 = min(s1.find('.'), s2.find('.')) # BUG w find
+    r2 = max(s1.rfind('.'), s2.rfind('.'))
+    return sum([s1[i]!=s2[i] for i in xrange(r1,r2)])
 
+    #return sum([0 if (s1[i] == '.' or s2[i] == '.') else -1 if s1[i] == s2[i] else 1 for i in xrange(len(s1))])
 
-### MIKE ###
-
-def edit_distance_matrix(ref, donor):
-    """
-    Computes the edit distance matrix between the donor and reference
-    This algorithm makes substitutions, insertions, and deletions all equal.
-    Does that strike you as making biological sense? You might try changing the cost of
-    deletions and insertions vs snps.
-    :param ref: reference genome (as an ACTG string)
-    :param donor: donor genome guess (as an ACTG string)
-    :return: complete (len(ref) + 1) x (len(donor) + 1) matrix computing all changes
-    """
-
-    output_matrix = np.zeros((len(ref), len(donor)))
-    # print len(ref), len(donor)
-    # print output_matrix
-    # This is a very fast and memory-efficient way to allocate a matrix
-    for i in range(len(ref)):
-        output_matrix[i, 0] = i
-    for j in range(len(donor)):
-        output_matrix[0, j] = j
-    for j in range(1, len(donor)):
-        for i in range(1, len(ref)):  # Big opportunities for improvement right here.
-            deletion = output_matrix[i - 1, j] + 1
-            insertion = output_matrix[i, j - 1] + 1
-            identity = output_matrix[i - 1, j - 1] if ref[i] == donor[j] else np.inf
-            substitution = output_matrix[i - 1, j - 1] + 1 if ref[i] != donor[j] else np.inf
-            output_matrix[i, j] = min(insertion, deletion, identity, substitution)
-    return output_matrix
+def hamming_ignore_dots_list_of_char(s1,s2):
+    assert len(s1)==len(s2)
+    total = 0
+    r1 = -1
+    r2 = -1
+    for i in xrange(len(s1)):
+        if s1[i] != '.' and s2[i] != '.':
+            r1 = i
+            break
+    for i in xrange(len(s1)-1,-1,-1):
+        if s1[i] != '.' and s2[i] != '.':
+            r2 = i
+            break
+    for i in xrange(r1,r2):
+        total += s1[i]!=s2[i]
+    return total - r2 + r1
 
 
 if __name__ == '__main__':
     args = sys.argv[1:]
     if len(args) == 2:
-        FILE_INDEX_BEGIN = int(args[0])
-        FILE_INDEX_END = int(args[1])
+        DIVIDE_INTO = int(args[0])
+        DO_NUMBER = int(args[1])
     else:
-        FILE_INDEX_BEGIN = 0
-        FILE_INDEX_END = len(os.listdir('data/{}/reads_split/'.format(c.DATASET)))
-    print 'Processing files {} through {}'.format(FILE_INDEX_BEGIN, FILE_INDEX_END)
+        DIVIDE_INTO = 1
+        DO_NUMBER = 1
+    print 'Doing part {} of {}'.format(DO_NUMBER, DIVIDE_INTO)
 
     print 'start pileup'
 
@@ -339,7 +373,70 @@ if __name__ == '__main__':
     # alignment_sorted = sorted(alignment)
     # alignment_flat = [item for sublist in alignment for item in sublist]
     #
-    stretches = pickle.load(file('stretches_{}.pkl'.format(c.DATASET), 'rb'))
+
+    if DO_NUMBER == 0:
+        print 'all snps'
+        d = pileup2(alignment)
+        all_snp(d, ref)
+        exit()
+
+    #d = pileup2(alignment)
+    # msgpack.dump(d, file('pileup2.msg','wb'))
+    d = msgpack.load(file('pileup2.msg','rb'))
+    print 'pileup complete'
+    if DO_NUMBER == 0:
+        print 'all snps'
+        all_snp(d, ref)
+        exit()
+
+    #iz = call_indel_zones(d,ref)
+    iz = msgpack.load(file('stretches_{}.msg'.format(c.DATASET), 'rb'))
+    iz = [x for x in iz if x[1] - x[0] <= 5]
+    print '{} spots will be checked for indels'.format(len(iz))
+
+    pos_to_read = pickle.load(file('pos_to_read.pkl','rb'))
+    # msgpack.dump(d, file('pos_to_read.msg','wb'))
+    # pos_to_read = msgpack.load(file('pos_to_read.msg','rb'))
+
+    # cProfile.run('generate_donor_pieces(iz[0:100],ref,pos_to_read)')
+
+    iz_piece = iz[len(iz)//DIVIDE_INTO*(DO_NUMBER-1):len(iz)//DIVIDE_INTO*DO_NUMBER]
+
+    the_donors = generate_donor_pieces(iz_piece, ref, pos_to_read)
+
+    # for donor_tuple in the_donors:
+    #     donor = donor_tuple[1]
+    #     pos = donor_tuple[0]
+    #     visualize_lines(donor,pos,ref)
+
+    # all_snp(d, ref)
+    msgpack.dump(the_donors,file('donors_{}'.format(c.DATASET),'wb'))
+
+    good_changes = []
+    for donor_tuple in the_donors:
+        donor = donor_tuple[1][0:-10]
+        pos = donor_tuple[0]
+        ref_piece = ref[pos:pos+len(donor)]
+        changes, score = dependencies.identify_changes(ref_piece,donor,0)
+        if score < 10:
+            #print visualize_lines(donor,pos,ref_piece)
+            for cc in changes:
+                try:
+                    cc[3] += pos
+                except:
+                    print pos
+                    print changes
+                    cc[2] += pos
+
+            good_changes.extend(changes)
+            print changes
+
+    utils.write_indels(good_changes, DO_NUMBER)
+
+
+    #stretches = pickle.load(file('stretches_{}.pkl'.format(c.DATASET), 'rb'))
+
+    #print 'len st: {}'.format(len(stretches))
     # nprt_sl = pickle.load(file('sorted_nprt_{}.pkl'.format(c.DATASET), 'rb'))
     #
     # print 'nonpeft len: {}'.format(len(nprt_sl))
@@ -352,16 +449,19 @@ if __name__ == '__main__':
     # print 'pickled!'
 
     # bad_stretches = pickle.load(file('bad_stretches.pkl','rb'))
-    pos_to_read = pickle.load(file('pos_to_read.pkl','rb'))
+    # pos_to_read = pickle.load(file('pos_to_read.pkl','rb'))
 
     # for key in pos_to_read:
     #     print 'key: {}\tvalue: {}'.format(key, pos_to_read[key])
 
-    (the_donors, donor_indexes) = generate_donor_pieces(stretches, ref, pos_to_read)
+    # (the_donors, donor_indexes) = generate_donor_pieces(stretches, ref, pos_to_read)
     #(the_donors, donor_indexes) = generate_donor_pieces_with_sorted_list(stretches, ref, alignment_sorted)
 
-    pickle.dump(the_donors, file('bad_stretches.pkl','wb'))
-    pickle.dump(donor_indexes, file('pos_to_read.pkl','wb'))
+    # pickle.dump(the_donors, file('bad_stretches.pkl','wb'))
+    # pickle.dump(donor_indexes, file('pos_to_read.pkl','wb'))
+
+    # msgpack.dump(the_donors, file('bad_stretches.msg','wb'))
+    # msgpack.dump(donor_indexes, file('pos_to_read.msg','wb'))
 
     # snp_list = []
     # ins_list = []
