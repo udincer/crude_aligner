@@ -183,7 +183,7 @@ def generate_donor_pieces(stretches, ref, pos_to_read):
             except KeyError:
                 pass
         # print 'reads: {}'.format(read_tuples)
-        distances = []
+        # distances = []
         #for read_tuple in read_tuples:
             #ref_piece = ref[read_tuple[0]-MARGIN:read_tuple[0]+c.READ_SIZE+MARGIN]
             # read_str = utils.integer_to_key(read[1], c.READ_SIZE)
@@ -194,10 +194,15 @@ def generate_donor_pieces(stretches, ref, pos_to_read):
 
         # seed generation!
         #argmin = distances.index(min(distances))
-
+        if len(read_tuples) < 5:
+            print 'skipping {} low read tuple count'.format(stretch)
+            continue
         argmin = 0 # first one always behaves well!
-        pos = read_tuples[argmin][0]
-        str = read_tuples[argmin][1]
+        try:
+            pos = read_tuples[argmin][0]
+            str = read_tuples[argmin][1]
+        except IndexError:
+            continue
         donor[argmin:argmin+c.READ_SIZE] = list(str)
 
         iteration_count = xrange(10)

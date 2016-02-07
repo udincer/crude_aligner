@@ -119,12 +119,12 @@ if __name__ == '__main__':
     ref = utils.read_reference()
     (stretches, nprt_list) = get_nonperfect_stretches(ref)
 
-    print 'sorting...'
-    sl = sorted(nprt_list)
-    print 'sorted: {}'.format(sl)
+    #print 'sorting...'
+    #sl = sorted(nprt_list)
+    #print 'sorted: {}'.format(sl)
 
     pickle.dump(stretches, file('stretches_{}.pkl'.format(c.DATASET), 'wb'))
-    pickle.dump(sl, file('sorted_nprt_{}.pkl'.format(c.DATASET), 'wb'))
+    #pickle.dump(sl, file('sorted_nprt_{}.pkl'.format(c.DATASET), 'wb'))
 
     print 'DONE'
 
