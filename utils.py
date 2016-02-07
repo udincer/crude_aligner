@@ -106,9 +106,6 @@ def write_indels(good_changes, num):
             elif change[0] == 'DEL':
                 dels.append(change)
         print 'writing indels file'
-        output_file.write('>SNP\n')
-        for snp in snps:
-            output_file.write('{},{},{}\n'.format(snp[1],snp[2],snp[3]))
 
         output_file.write('>INS\n')
         for ins in inss:
@@ -117,6 +114,10 @@ def write_indels(good_changes, num):
         output_file.write('>DEL\n')
         for ddd in dels:
             output_file.write('{},{}\n'.format(ddd[1],ddd[2]))
+
+        output_file.write('>SNP\n')
+        for snp in snps:
+            output_file.write('{},{},{}\n'.format(snp[1],snp[2],snp[3]))
 
 
 # return sum([0 if s1[i]==s2[i] or (s1[i] == '.' or s2[i] == '.') else 1 for i in xrange(len(s1))])

@@ -6,21 +6,21 @@ import utils
 from bitarray import bitarray
 import msgpack
 
-def compile_alignments_into_dict():
-    print 'compiling alignments into dict...'
-    directory = '{}/{}/alignments/'.format(c.DATA_PATH, c.DATASET)
-    part_max = len(os.listdir(directory))
-    fns = ['alignments_{}_{}_part_{}.pkl'.format(c.DATASET, c.KEY_SIZE, file_num) for file_num in xrange(0, part_max)]
-
-    location_to_read_dict = {}
-    for fn in fns:
-        alignments = pickle.load(open('{}{}'.format(directory,fn), 'rb'))
-        alignments = [item for sublist in alignments for item in sublist]
-        for t in alignments:
-            location_to_read_tdict[t[0]] = t[1]
-        print 'done {}'.format(fn)
-
-    return location_to_read_dict
+# def compile_alignments_into_dict():
+#     print 'compiling alignments into dict...'
+#     directory = '{}/{}/alignments/'.format(c.DATA_PATH, c.DATASET)
+#     part_max = len(os.listdir(directory))
+#     fns = ['alignments_{}_{}_part_{}.pkl'.format(c.DATASET, c.KEY_SIZE, file_num) for file_num in xrange(0, part_max)]
+#
+#     location_to_read_dict = {}
+#     for fn in fns:
+#         alignments = pickle.load(open('{}{}'.format(directory,fn), 'rb'))
+#         alignments = [item for sublist in alignments for item in sublist]
+#         for t in alignments:
+#             location_to_read_tdict[t[0]] = t[1]
+#         print 'done {}'.format(fn)
+#
+#     return location_to_read_dict
 
 def compile_alignments_into_list():
     print 'compiling alignments into list...'
@@ -41,15 +41,18 @@ def compile_alignments_into_list():
 def ident_bad_regions(some_pr_tuples, ref):
     nonperfect_pos_read_tuples = []
     good_areas = bitarray(len(ref))
+    good_areas.setall(False)
     start = time.time()
     count = 0.0
     for t in some_pr_tuples:
         read_num = t[1]
         pos = t[0]
         ref_piece_num = utils.key_to_integer(ref[pos:pos+c.READ_SIZE])
-        #if read_num == ref_piece_num:
-        #    good_areas[pos:pos+c.READ_SIZE] = True
-        good_areas[pos:pos+c.READ_SIZE] = True
+        if read_num == ref_piece_num:
+            good_areas[pos:pos+c.READ_SIZE] = True
+        else:
+            pass
+        #good_areas[pos:pos+c.READ_SIZE] = True
         #else:
         #    nonperfect_pos_read_tuples.append(t)
         count += 1
@@ -82,6 +85,7 @@ def get_nonperfect_stretches(ref):
         (ga, nprt) = ident_bad_regions(alignments, ref)
         if first:
             ga_overall = ga
+            first = False
         else:
             ga_overall = merge_bad_regions([ga_overall, ga])
         #nprt_list.extend(nprt)
@@ -116,8 +120,11 @@ def get_nonperfect_stretches(ref):
 
 if __name__ == '__main__':
 
+
+
     ref = utils.read_reference()
     stretches = get_nonperfect_stretches(ref)
+    print stretches
 
     #print 'sorting...'
     #sl = sorted(nprt_list)

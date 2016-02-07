@@ -14,6 +14,8 @@ import dependencies
 CALL_LOOKUP = {0: 'A', 1: 'C', 2: 'G', 3: 'T'}
 INV_LOOKUP  = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
 
+SCORE_THRESHOLD = 40
+
 
 def call_indel_zones(donor, ref):
     BIN_SIZE = 25
@@ -184,26 +186,27 @@ def generate_donor_pieces(stretches, ref, pos_to_read):
     for stretch in stretches:
         the_donors.append(get_donor_for_stretch(stretch,ref ,pos_to_read))
         count += 1
-        print 'progress: {:.2f}'.format(count / len(stretches))
+        if count % 1000 == 0:
+            print 'progress: {:.2f}'.format(count / len(stretches))
     return the_donors
 
 
 def get_donor_for_stretch(stretch, ref, pos_to_read):
-    STRETCH_LIMIT = 5
-    MARGIN_LEFT = c.READ_SIZE + 2
-    MARGIN_RIGHT = 5
+    STRETCH_LIMIT = 6
+    MARGIN_LEFT = c.READ_SIZE
+    MARGIN_RIGHT = c.READ_SIZE
 
     stretch_length = stretch[1] - stretch[0]
     if stretch_length > STRETCH_LIMIT:
         print '{} is over stretch limit, skipping.'.format(stretch)
         return
-    donor = ['.'] * (MARGIN_RIGHT + MARGIN_LEFT + stretch_length)
+    donor = ['.'] * (MARGIN_RIGHT + MARGIN_LEFT + stretch_length + 1)
     read_tuples = []
     (start, end) = (stretch[0] - MARGIN_LEFT, stretch[1] + MARGIN_RIGHT)
     if start < 0 or end > len(ref):
         return
 
-    for i in xrange(start, end):
+    for i in xrange(start, end-c.READ_SIZE): # we don't want the extras on the right
         try:
             read_tuples.append((i, utils.integer_to_key(pos_to_read[i], c.READ_SIZE)))
         except KeyError:
@@ -220,28 +223,54 @@ def get_donor_for_stretch(stretch, ref, pos_to_read):
 
     # seed generation!
     # argmin = distances.index(min(distances))
-    if len(read_tuples) < 5:
-        print 'skipping {} low read tuple count'.format(stretch)
+    if len(read_tuples) < 17:
+        #print 'skipping {} low read tuple count'.format(stretch)
         return
     elif len(read_tuples) > 250:
         print 'skipping {} HIGH read tuple count'.format(stretch)
         return
-    argmin = 0  # first one always behaves well!
-    try:
-        pos = read_tuples[argmin][0]
-        str = read_tuples[argmin][1]
-        if hamming_ignore_dots_list_of_char(ref[pos:pos + c.READ_SIZE], str) > -1 * c.READ_SIZE + 1:
-            print 'skipping due to bad initial read'
-            print pos
-            return
-    except IndexError:
-        return
-    donor[argmin:argmin + c.READ_SIZE] = list(str)
 
-    iteration_count = xrange(7)
+    # ham = []
+    # for s in read_tuples:
+    #     rr = s[1]
+    #     po = s[0]
+    #     ham.append(hamming_ignore_dots_list_of_char(ref[po:po + c.READ_SIZE], rr))
+    # argmin = ham.index(min(ham))
+    # print 'ARGMIN:{}.'.format(argmin)
+
+    # SEED NUMBER 1
+    #argmin = 0  # first one always behaves well!
+    # try:
+    # #    pos = read_tuples[argmin][0]
+    # #    str = read_tuples[argmin][1]
+    #     #if hamming_ignore_dots_list_of_char(ref[pos:pos + c.READ_SIZE], str) > -1 * c.READ_SIZE + 1:
+    #     if sum([ref[pos+i] == str[i] for i in xrange(len(str))])<49:
+    #         print 'skipping due to bad initial read'
+    #         #print pos
+    #         return
+    donor[0:0 + c.READ_SIZE] = list(ref[start:start + c.READ_SIZE])
+    #donor[-1*c.READ_SIZE-1:-1] = list(ref[end - c.READ_SIZE:end])
+    # except IndexError:
+    #     return
+
+
+    # argmax = -1
+    # try:
+    #     pos = read_tuples[argmax][0]
+    #     str = read_tuples[argmax][1]
+    #     if sum([ref[pos+i] == str[i] for i in xrange(len(str))])<50:
+    #         print 'skipping due to bad initial read'
+    #         return
+    #     donor[argmax:argmax + c.READ_SIZE] = list(str)
+    # except IndexError:
+    #     return
+
+    print 'initial state of donor:\n{}'.format(''.join(donor))
+
+    iteration_count = xrange(3)
     to_be_removed = []
     still_unused = []
-    threshold = -40
+    threshold = -30
     for _ in iteration_count:
         threshold += 3
         for item in to_be_removed:
@@ -253,7 +282,7 @@ def get_donor_for_stretch(stretch, ref, pos_to_read):
         to_be_removed = []
 
         chosen_ones = []
-        # print '\n{} -> {}'.format(''.join(donor), stretch)
+        print '\n{} -> {}'.format(''.join(donor), stretch)
         for read_tuple in read_tuples:
             if read_tuple == None:
                 continue
@@ -279,20 +308,18 @@ def get_donor_for_stretch(stretch, ref, pos_to_read):
                 padded = pre + list(read) + post
                 chosen_ones.append(padded)
                 to_be_removed.append(read_tuple)
-                #print '{} -> {}'.format(''.join(padded), min(hams))
-            #else:
-                #still_unused.append(read_tuple)
+                print '{} -> {}'.format(''.join(padded), min(hams))
 
         piece_of_donor = pileup_ignore_dots(chosen_ones, donor)
         donor = piece_of_donor  # new seed!
 
-    return (pos, donor.strip('.'))
+    return (start, donor.strip('.'))
 
 
-def visualize_lines(donor, pos, ref):
+def visualize_lines(donor, pos, ref, stretch = ''):
     try:
-        pipes = ''.join(['|' if ref[i] == donor[i] else ' ' for i in xrange(len(donor))])
-        print '{}\n{}\n{}'.format(ref[0:0+len(donor)], pipes, donor)
+        pipes = ''.join(['|' if ref[pos+i] == donor[i] else ' ' for i in xrange(len(donor))])
+        print '\n{}\n{} -> {}\n{}'.format(ref[pos:pos+len(donor)], pipes, stretch, donor)
     except TypeError:
         pass
 
@@ -352,8 +379,35 @@ def hamming_ignore_dots_list_of_char(s1,s2):
         total += s1[i]!=s2[i]
     return total - r2 + r1
 
+def last_part():
+    the_donors = msgpack.load(file('donors_{}'.format(c.DATASET),'rb'))
+
+    #clean up
+    the_donors = [donors for donors in the_donors if donors]
+    good_changes = []
+    for donor_tuple in the_donors:
+        donor = donor_tuple[1]
+        pos = donor_tuple[0]
+        ref_piece = ref[pos:pos+len(donor)]
+        changes, score = dependencies.identify_changes(ref_piece,donor,0)
+        if score < 10:
+            #print visualize_lines(donor,pos,ref_piece)
+            for cc in changes:
+                try:
+                    cc[3] += pos
+                except:
+                    cc[2] += pos
+
+            good_changes.extend(changes)
+
+    utils.write_indels(good_changes, DO_NUMBER)
+
 
 if __name__ == '__main__':
+
+
+
+
     args = sys.argv[1:]
     if len(args) == 2:
         DIVIDE_INTO = int(args[0])
@@ -366,6 +420,7 @@ if __name__ == '__main__':
     print 'start pileup'
 
     ref = utils.read_reference('data/{}/{}'.format(c.DATASET, c.REF_FILE))
+
     #mapping_pickles_folder = 'data/{}/pickled_mappings'.format(c.DATASET)
     #pickle_files = ['{}/mappings_part_{}.txt.pkl'.format(mapping_pickles_folder, i) for i in xrange(FILE_INDEX_BEGIN, FILE_INDEX_END)]
 
@@ -389,8 +444,11 @@ if __name__ == '__main__':
         all_snp(d, ref)
         exit()
 
+    print 'calling indel zones'
     #iz = call_indel_zones(d,ref)
+    print 'called indel zones'
     iz = msgpack.load(file('stretches_{}.msg'.format(c.DATASET), 'rb'))
+    print 'before length filtering: {}'.format(len(iz))
     iz = [x for x in iz if x[1] - x[0] <= 5]
     print '{} spots will be checked for indels'.format(len(iz))
 
@@ -404,34 +462,43 @@ if __name__ == '__main__':
 
     the_donors = generate_donor_pieces(iz_piece, ref, pos_to_read)
 
-    # for donor_tuple in the_donors:
-    #     donor = donor_tuple[1]
-    #     pos = donor_tuple[0]
-    #     visualize_lines(donor,pos,ref)
+    #the_donors = msgpack.load(file('donors_{}'.format(c.DATASET),'rb'))
+    #clean up
+    the_donors = [donors for donors in the_donors if donors]
+
 
     # all_snp(d, ref)
-    msgpack.dump(the_donors,file('donors_{}'.format(c.DATASET),'wb'))
+    #msgpack.dump(the_donors,file('donors_{}'.format(c.DATASET),'wb'))
+    #exit()
+
+    #
 
     good_changes = []
     for donor_tuple in the_donors:
-        donor = donor_tuple[1][0:-10]
+        donor = donor_tuple[1]
         pos = donor_tuple[0]
         ref_piece = ref[pos:pos+len(donor)]
         changes, score = dependencies.identify_changes(ref_piece,donor,0)
-        if score < 10:
+        if score < SCORE_THRESHOLD:
+            visualize_lines(donor,pos,ref, pos)
+            print 'C.\n{}'.format(changes)
             #print visualize_lines(donor,pos,ref_piece)
             for cc in changes:
                 try:
                     cc[3] += pos
                 except:
-                    print pos
-                    print changes
                     cc[2] += pos
 
             good_changes.extend(changes)
-            print changes
+
+    for _ in good_changes:
+        print _
 
     utils.write_indels(good_changes, DO_NUMBER)
+
+    msgpack.dump(the_donors,file('donors_{}'.format(c.DATASET),'wb'))
+
+
 
 
     #stretches = pickle.load(file('stretches_{}.pkl'.format(c.DATASET), 'rb'))

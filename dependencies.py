@@ -21,8 +21,8 @@ def edit_distance_matrix(ref, donor):
         output_matrix[0, j] = j
     for j in range(1, len(donor)):
         for i in range(1, len(ref)):  # Big opportunities for improvement right here.
-            deletion = output_matrix[i - 1, j] + 1
-            insertion = output_matrix[i, j - 1] + 1
+            deletion = output_matrix[i - 1, j] + 2
+            insertion = output_matrix[i, j - 1] + 2
             identity = output_matrix[i - 1, j - 1] if ref[i] == donor[j] else np.inf
             substitution = output_matrix[i - 1, j - 1] + 1 if ref[i] != donor[j] else np.inf
             output_matrix[i, j] = min(insertion, deletion, identity, substitution)
