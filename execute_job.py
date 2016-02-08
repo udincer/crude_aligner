@@ -4,10 +4,16 @@ import pileup
 import utils
 import dependencies
 import msgpack
+import sys
 
 if __name__ == '__main__':
 
-    job_number = 10
+    args = sys.argv[1:]
+    if len(args) ==  1:
+        job_number = int(args[0])
+    else:
+        job_number = 1
+
     directory = 'jobs'
 
     print 'loading {}...'.format(job_number)
@@ -44,5 +50,4 @@ if __name__ == '__main__':
         print _
 
     utils.write_indels(good_changes, job_number)
-
     msgpack.dump(the_donors,file('donors_{}_part_{}'.format(c.DATASET, job_number),'wb'))

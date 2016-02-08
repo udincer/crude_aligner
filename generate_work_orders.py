@@ -2,11 +2,15 @@ import cPickle as pickle
 import configuration as c
 import os
 import msgpack
-
+import sys
 
 if __name__ == '__main__':
 
-    TOTAL_JOB_COUNT = 10
+    args = sys.argv[1:]
+    if len(args) ==  1:
+        TOTAL_JOB_COUNT = int(args[0])
+    else:
+        TOTAL_JOB_COUNT = 10
 
     print 'Generating work orders...'
     directory = 'jobs'
