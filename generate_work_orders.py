@@ -1,7 +1,7 @@
 import cPickle as pickle
 import configuration as c
 import os
-import msgpack
+#import msgpack
 import sys
 
 if __name__ == '__main__':
@@ -18,7 +18,7 @@ if __name__ == '__main__':
         os.makedirs(directory)
 
     print 'Loading stretches'
-    stretches = msgpack.load(file('stretches_{}.msg'.format(c.DATASET), 'rb'))
+    stretches = pickle.load(file('stretches_{}.pkl'.format(c.DATASET), 'rb'))
 
     print 'loading huge dictionary'
     pos_to_read = pickle.load(file('compiled_{}.pkl'.format(c.DATASET),'rb'))

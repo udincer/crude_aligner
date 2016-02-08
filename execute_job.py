@@ -26,15 +26,16 @@ if __name__ == '__main__':
     the_donors = pileup.generate_donor_pieces(sub, ref, d)
     the_donors = [donors for donors in the_donors if donors]
 
+    print 'done assembling, SW time...'
+
     good_changes = []
+    count = 0.0
     for donor_tuple in the_donors:
         donor = donor_tuple[1]
         pos = donor_tuple[0]
         ref_piece = ref[pos:pos+len(donor)]
         changes, score = dependencies.identify_changes(ref_piece,donor,-1)
         if score < len(donor) * 0.4: # thanks leah
-            #visualize_lines(donor,pos,ref, pos)
-            #print 'C.\n{}'.format(changes)
             for cc in changes:
                 try:
                     if cc[2] == '.':
@@ -45,9 +46,9 @@ if __name__ == '__main__':
                     cc[2] += pos
 
             good_changes.extend(changes)
-
-    for _ in good_changes:
-        print _
+        count += 1
+        if count % 100 == 0:
+            print 'SW progress: {}'.format(count/len(the_donors))
 
     utils.write_indels(good_changes, job_number)
     msgpack.dump(the_donors,file('donors_{}_part_{}'.format(c.DATASET, job_number),'wb'))

@@ -313,7 +313,7 @@ def get_donor_for_stretch(stretch, ref, pos_to_read):
         donor = piece_of_donor  # new seed!
 
 
-    print '\n{} -> {}'.format(''.join(donor), stretch)
+    #print '\n{} -> {}'.format(''.join(donor), stretch)
     return (start, donor.strip('.'))
 
 

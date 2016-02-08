@@ -71,7 +71,9 @@ def merge_bad_regions(good_areas_list):
 
 
 def get_nonperfect_stretches(ref):
-    directory = '{}/{}/alignments/'.format(c.DATA_PATH, c.DATASET)
+    #directory = '{}/{}/alignments/'.format(c.DATA_PATH, c.DATASET)
+    directory = 'alignments/'
+
     part_max = len(os.listdir(directory))
     fns = ['alignments_{}_{}_part_{}.pkl'.format(c.DATASET, c.KEY_SIZE, file_num) for file_num in xrange(0, part_max)]
 
@@ -130,8 +132,8 @@ if __name__ == '__main__':
     #sl = sorted(nprt_list)
     #print 'sorted: {}'.format(sl)
 
-    #pickle.dump(stretches, file('stretches_{}.pkl'.format(c.DATASET), 'wb'))
-    msgpack.dump(stretches, file('stretches_{}.msg'.format(c.DATASET), 'wb'))
+    pickle.dump(stretches, file('stretches_{}.pkl'.format(c.DATASET), 'wb'))
+    #msgpack.dump(stretches, file('stretches_{}.msg'.format(c.DATASET), 'wb'))
 
     #pickle.dump(sl, file('sorted_nprt_{}.pkl'.format(c.DATASET), 'wb'))
 
