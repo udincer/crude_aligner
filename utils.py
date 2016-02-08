@@ -96,7 +96,8 @@ def write_indels(good_changes, num):
     snps = []
     inss = []
     dels = []
-    with open("{}_indels_out_part_{}.txt".format(c.DATASET, num), "w") as output_file:
+    directory = 'indels_list'
+    with open("{}/{}_indels_out_part_{}.txt".format(directory, c.DATASET, num), "w") as output_file:
         output_file.write('>{}_{}\n'.format(c.DATASET, 'chr_1'))
         for change in good_changes:
             if change[0] == 'SNP':
@@ -125,5 +126,4 @@ def write_indels(good_changes, num):
 # return sum([0 if s1[i]==s2[i] or (s1[i] == '.' or s2[i] == '.') else 1 for i in xrange(len(s1))])
 
 if __name__ == '__main__':
-
-    print hamming_ignore_dots('......AAABBAAAAAA...','...AAAAAAAAA.....A..')
+    pass
