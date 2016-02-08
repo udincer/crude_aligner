@@ -21,8 +21,8 @@ def edit_distance_matrix(ref, donor):
         output_matrix[0, j] = j
     for j in range(1, len(donor)):
         for i in range(1, len(ref)):  # Big opportunities for improvement right here.
-            deletion = output_matrix[i - 1, j] + 2
-            insertion = output_matrix[i, j - 1] + 2
+            deletion = output_matrix[i - 1, j] + 1
+            insertion = output_matrix[i, j - 1] + 1
             identity = output_matrix[i - 1, j - 1] if ref[i] == donor[j] else np.inf
             substitution = output_matrix[i - 1, j - 1] + 1 if ref[i] != donor[j] else np.inf
             output_matrix[i, j] = min(insertion, deletion, identity, substitution)
@@ -90,7 +90,7 @@ def identify_changes(ref, donor, offset):
             current_row = pvs_row
             current_column = pvs_column
         elif min_dist == substitution_dist:
-            changes.append(['SNP', ref[current_row], donor[current_column], ref_index])
+            changes.append(['SNP', ref[current_row], donor[current_column], ref_index + 1])
             current_row = pvs_row
             current_column = pvs_column
         elif min_dist == insertion_dist:
@@ -103,7 +103,7 @@ def identify_changes(ref, donor, offset):
             if len(changes) > 0 and changes[-1][0] == 'DEL' and changes[-1][-1] == ref_index + 1:
                 changes[-1] = ['DEL', ref[current_row] + changes[-1][1], ref_index]
             else:
-                changes.append(['DEL', ref[current_row], ref_index])
+                changes.append(['DEL', ref[current_row], ref_index + 1])
             current_row = pvs_row
         else:
             raise ValueError
@@ -115,3 +115,4 @@ if __name__ == '__main__':
     a ='TCGGATAAGGCACCTGAATTATGAACTTGTCAAGTCGGCACCCGCGGGCTTTGCCACCGATGAACGCCGTTAAAGCCCAGACATTAAAGGACGGTGACGTGT'
     b ='TCGGATAAGTCACCTGAATTATGAACTTGTCAAGTCGGCACCCGCGTGGCTTTGCCACCGATGAACGCCGTTAAAGCCCAGACATTAAAGGACGGTGACTGT'
     changes, score = identify_changes(a,b,0)
+    pass

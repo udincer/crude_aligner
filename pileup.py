@@ -194,7 +194,7 @@ def generate_donor_pieces(stretches, ref, pos_to_read):
 def get_donor_for_stretch(stretch, ref, pos_to_read):
     STRETCH_LIMIT = 20
     MARGIN_LEFT = c.READ_SIZE
-    MARGIN_RIGHT = c.READ_SIZE
+    MARGIN_RIGHT = stretch[1] - stretch[0] + 8
 
     stretch_length = stretch[1] - stretch[0]
     if stretch_length > STRETCH_LIMIT:
@@ -223,8 +223,8 @@ def get_donor_for_stretch(stretch, ref, pos_to_read):
 
     # seed generation!
     # argmin = distances.index(min(distances))
-    if len(read_tuples) < 17:
-        #print 'skipping {} low read tuple count'.format(stretch)
+    if len(read_tuples) < stretch_length:
+        print 'skipping {} low read tuple count'.format(stretch)
         return
     elif len(read_tuples) > 250:
         print 'skipping {} HIGH read tuple count'.format(stretch)
@@ -436,30 +436,34 @@ if __name__ == '__main__':
         all_snp(d, ref)
         exit()
 
-    d = pileup2(alignment)
-    msgpack.dump(d, file('pileup2.msg','wb'))
-    #d = msgpack.load(file('pileup2.msg','rb'))
+    #d = pileup2(alignment)
+    #msgpack.dump(d, file('pileup2.msg','wb'))
+    d = msgpack.load(file('pileup2.msg','rb'))
     print 'pileup complete'
     if DO_NUMBER == 0:
         print 'all snps'
         all_snp(d, ref)
         exit()
 
+    LENGTH_FILTER = 10
     print 'calling indel zones'
     #iz = call_indel_zones(d,ref)
     print 'called indel zones'
     iz = msgpack.load(file('stretches_{}.msg'.format(c.DATASET), 'rb'))
     print 'before length filtering: {}'.format(len(iz))
-    iz = [x for x in iz if x[1] - x[0] <= 8]
+    iz = [x for x in iz if x[1] - x[0] <= LENGTH_FILTER]
     print '{} spots will be checked for indels'.format(len(iz))
 
-    pos_to_read = pickle.load(file('pos_to_read.pkl','rb'))
+
+    pos_to_read = pickle.load(file('compiled_{}.pkl'.format(c.DATASET),'rb'))
+    #pos_to_read = pickle.load(file('pos_to_read.pkl','rb'))
     # msgpack.dump(d, file('pos_to_read.msg','wb'))
     # pos_to_read = msgpack.load(file('pos_to_read.msg','rb'))
 
     # cProfile.run('generate_donor_pieces(iz[0:100],ref,pos_to_read)')
 
     iz_piece = iz[len(iz)//DIVIDE_INTO*(DO_NUMBER-1):len(iz)//DIVIDE_INTO*DO_NUMBER]
+    print 'now checking {} positions'.format(len(iz_piece))
 
     the_donors = generate_donor_pieces(iz_piece, ref, pos_to_read)
 
@@ -479,8 +483,8 @@ if __name__ == '__main__':
         donor = donor_tuple[1]
         pos = donor_tuple[0]
         ref_piece = ref[pos:pos+len(donor)]
-        changes, score = dependencies.identify_changes(ref_piece,donor,0)
-        if score < SCORE_THRESHOLD:
+        changes, score = dependencies.identify_changes(ref_piece,donor,-1)
+        if score < len(donor) * 0.4: # thanks leah
             #visualize_lines(donor,pos,ref, pos)
             #print 'C.\n{}'.format(changes)
             for cc in changes:
@@ -501,76 +505,4 @@ if __name__ == '__main__':
 
     msgpack.dump(the_donors,file('donors_{}'.format(c.DATASET),'wb'))
 
-
-
-
-    #stretches = pickle.load(file('stretches_{}.pkl'.format(c.DATASET), 'rb'))
-
-    #print 'len st: {}'.format(len(stretches))
-    # nprt_sl = pickle.load(file('sorted_nprt_{}.pkl'.format(c.DATASET), 'rb'))
-    #
-    # print 'nonpeft len: {}'.format(len(nprt_sl))
-    # print 'align len:   {}'.format(len(alignment))
-    # pos_to_read = pickle.load(file('compiled_{}.pkl'.format(c.DATASET)))
-    #
-    # pickle.dump(bad_stretches, file('bad_stretches.pkl','wb'))
-    # pickle.dump(pos_to_read, file('pos_to_read.pkl','wb'))
-    #
-    # print 'pickled!'
-
-    # bad_stretches = pickle.load(file('bad_stretches.pkl','rb'))
-    # pos_to_read = pickle.load(file('pos_to_read.pkl','rb'))
-
-    # for key in pos_to_read:
-    #     print 'key: {}\tvalue: {}'.format(key, pos_to_read[key])
-
-    # (the_donors, donor_indexes) = generate_donor_pieces(stretches, ref, pos_to_read)
-    #(the_donors, donor_indexes) = generate_donor_pieces_with_sorted_list(stretches, ref, alignment_sorted)
-
-    # pickle.dump(the_donors, file('bad_stretches.pkl','wb'))
-    # pickle.dump(donor_indexes, file('pos_to_read.pkl','wb'))
-
-    # msgpack.dump(the_donors, file('bad_stretches.msg','wb'))
-    # msgpack.dump(donor_indexes, file('pos_to_read.msg','wb'))
-
-    # snp_list = []
-    # ins_list = []
-    # del_list = []
-    # for i in xrange(len(donor_indexes)):
-    #     stretch = stretches[i]
-    #     (start, end) = (donor_indexes[i], donor_indexes[i] + 180)
-    #     local_ref = ref[start:end]
-    #     if the_donors[i] == None:
-    #         continue
-    #     donor = the_donors[i].strip('.')
-    #     changes = identify_changes(local_ref,donor,0)
-    #     for change in changes:
-    #         if change[0] == 'SNP':
-    #             f = change[1]
-    #             t = change[2]
-    #             loc = change[3] + donor_indexes[i]
-    #             snp_list.append((f,t,loc))
-    #         elif change[0] == 'INS':
-    #             ins = change[1]
-    #             loc = change[2] + donor_indexes[i]
-    #             ins_list.append((ins,loc))
-    #         if change[0] == 'DEL':
-    #             d = change[1]
-    #             loc = change[2] + donor_indexes[i]
-    #             del_list.append((d,loc))
-    #
-    # print snp_list
-    # print del_list
-    # print ins_list
-
-
     print 'done?'
-    # print 'piling up...'
-    # donor = pileup2(alignment_flat)
-    #
-    # co = Counter()
-    # [co.update(d) for d in donor]
-    # print co
-    #
-    # snps = all_snp(donor, ref)
-    # print 'done'
